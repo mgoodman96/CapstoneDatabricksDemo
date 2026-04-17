@@ -129,5 +129,71 @@ df.write.format("delta").mode("overwrite").saveAsTable(f"{catalog_name}.{bronze_
 
 # COMMAND ----------
 
+count=spark.sql('select count(*) from longlamp_catalog.bronze.longlamp_abstract_generation_temporal')
+print(f"Number of rows in {table_name} is {count.first()[0]}")
+
+# COMMAND ----------
+
 # MAGIC %sql
 # MAGIC Select * from longlamp_catalog.bronze.longlamp_abstract_generation_temporal limit 10;
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Purpose of the Silver Zone
+# MAGIC
+# MAGIC The **silver zone** in the medallion architecture is where raw data from the bronze layer is cleaned, transformed, and structured for analytics and downstream processing. For the LongLaMP dataset, the silver zone serves to:
+# MAGIC
+# MAGIC - **Normalize and Flatten Data**: Nested JSON columns from the raw parquet files are parsed and expanded into separate columns, making the data tabular and easier to query.
+# MAGIC - **Data Quality Improvements**: Handle missing values, enforce data types, and standardize formats.
+# MAGIC - **Enable Analytics**: By splitting up nested structures, the data becomes accessible to BI tools, SQL queries, and machine learning models.
+# MAGIC
+# MAGIC This transformation ensures that complex, nested data is converted into a clean, queryable format suitable for analysis and reporting.
+
+# COMMAND ----------
+
+from pyspark.sql.functions import explode
+
+bronze_table = f"{catalog_name}.{bronze_schema}.longlamp_abstract_generation_temporal"
+silver_table = f"{catalog_name}.{silver_schema}.longlamp_profiles"
+
+df_bronze = spark.table(bronze_table)
+df_profile = df_bronze.select(explode("profile").alias("profile")) \
+    .select(
+        "profile.abstract",
+        "profile.id",
+        "profile.title",
+        "profile.year"
+    )
+
+# COMMAND ----------
+
+df_profile.display()
+
+# COMMAND ----------
+
+df_profile.write.format("delta").mode("overwrite").saveAsTable(silver_table)
+
+# COMMAND ----------
+
+count=spark.sql(f'select count(*) from {silver_table}')
+print(f"Number of rows in {silver_table} is {count.first()[0]:,}")
+
+# COMMAND ----------
+
+# MAGIC %sql 
+# MAGIC Select * from longlamp_catalog.silver.longlamp_profiles where title like '%Accounting%'
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC  (**_sqldf**) is a variable that is temporarily stored to be used in SQL or Python **after** the magic cell is ran
+# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC     SELECT year, COUNT(*) AS record_count
+# MAGIC     FROM _sqldf
+# MAGIC     GROUP BY year
+# MAGIC     ORDER BY record_count desc
